@@ -35,13 +35,6 @@ class Match4(models.Model):
     start_time = models.DateTimeField(blank=True, null=True)
     current_turn = models.IntegerField(blank=True, null=True)
 
-    def clean(self, *args, **kwargs):
-        if self.current_turn >= 4:
-            raise ValidationError(
-                "Out of range turn")
-
-        super(Match4, self).clean(*args, **kwargs)
-
 
 class Room4(models.Model):
     name = models.CharField(max_length=128)
@@ -55,14 +48,8 @@ class Room4(models.Model):
         ONE_THREE__TWO_FOUR = 2
         ONE_FOUR__TWO_THREE = 3
 
-    teams = models.IntegerField(choices=Teams.choices, default=Teams.ONE_TWO__THREE_FOUR)
-
-    def clean(self, *args, **kwargs):
-        if self.players.count() > 4:
-            raise ValidationError(
-                "More than 4 players attached")
-
-        super(Match4, self).clean(*args, **kwargs)
+    teams = models.IntegerField(
+        choices=Teams.choices, default=Teams.ONE_TWO__THREE_FOUR)
 
 
 @receiver(post_save, sender=settings.AUTH_USER_MODEL)
