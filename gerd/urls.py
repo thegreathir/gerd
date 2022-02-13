@@ -17,7 +17,11 @@ from django.contrib import admin
 from django.urls import path
 from rest_framework.authtoken import views
 
+from core.views import Room4List, Room4Detail
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api-token-auth/', views.obtain_auth_token),
+    path('rooms/', Room4List.as_view()),
+    path('rooms/<int:pk>/', Room4Detail.as_view()),
 ]

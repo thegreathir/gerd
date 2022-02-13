@@ -55,7 +55,7 @@ class Room4(models.Model):
         ONE_THREE__TWO_FOUR = 2
         ONE_FOUR__TWO_THREE = 3
 
-    teams = models.IntegerField(choices=Teams.choices)
+    teams = models.IntegerField(choices=Teams.choices, default=Teams.ONE_TWO__THREE_FOUR)
 
     def clean(self, *args, **kwargs):
         if self.players.count() > 4:
