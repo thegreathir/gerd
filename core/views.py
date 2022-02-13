@@ -9,19 +9,19 @@ from rest_framework.permissions import (IsAuthenticated,
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from core.models import Room4
-from core.serializers import Room4Serializer
+from core.models import Room
+from core.serializers import RoomSerializer
 
 
-class Room4List(generics.ListCreateAPIView):
-    queryset = Room4.objects.all()
-    serializer_class = Room4Serializer
+class RoomList(generics.ListCreateAPIView):
+    queryset = Room.objects.all()
+    serializer_class = RoomSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
 
 
-class Room4Detail(generics.RetrieveAPIView):
-    queryset = Room4.objects.all()
-    serializer_class = Room4Serializer
+class RoomDetail(generics.RetrieveAPIView):
+    queryset = Room.objects.all()
+    serializer_class = RoomSerializer
 
 
 class RoomCapacityExceededError(Exception):
@@ -33,7 +33,7 @@ class RoomCapacityExceededError(Exception):
 def join_to_room(request, pk):
     try:
         with transaction.atomic():
-            room = Room4.objects.get(pk=pk)
+            room = Room.objects.get(pk=pk)
 
             if room.players.count() < 4:
                 room.players.add(request.user)
@@ -42,7 +42,7 @@ def join_to_room(request, pk):
                 return Response(status=status.HTTP_200_OK)
             else:
                 raise RoomCapacityExceededError()
-    except Room4.DoesNotExist:
+    except Room.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
     except RoomCapacityExceededError:
         return Response(data={

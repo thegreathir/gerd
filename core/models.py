@@ -17,8 +17,12 @@ class Word(models.Model):
     compexity = models.IntegerField(choices=Compexity.choices)
 
 
-class Match4(models.Model):
-    room = models.ForeignKey("Room4", models.CASCADE)
+class Match(models.Model):
+    room = models.OneToOneField(
+        "Room",
+        on_delete=models.CASCADE,
+        primary_key=True,
+    )
 
     words = models.ManyToManyField(
         to=Word,
@@ -36,7 +40,7 @@ class Match4(models.Model):
     current_turn = models.IntegerField(blank=True, null=True)
 
 
-class Room4(models.Model):
+class Room(models.Model):
     name = models.CharField(max_length=128)
     players = models.ManyToManyField(
         to=settings.AUTH_USER_MODEL,
