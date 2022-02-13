@@ -27,7 +27,7 @@ class Room4Detail(generics.RetrieveAPIView):
 @transaction.atomic
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-def attach_player_to_room(request, pk):
+def join_to_room(request, pk):
     try:
         room = Room4.objects.get(pk=pk)
     except Room4.DoesNotExist:

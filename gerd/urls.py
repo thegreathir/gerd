@@ -17,12 +17,12 @@ from django.contrib import admin
 from django.urls import path
 from rest_framework.authtoken import views
 
-from core.views import Room4List, Room4Detail, attach_player_to_room
+from core.views import Room4List, Room4Detail, join_to_room
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api-token-auth/', views.obtain_auth_token),
     path('rooms/', Room4List.as_view()),
     path('rooms/<int:pk>/', Room4Detail.as_view()),
-    path('rooms/<int:pk>/attach', attach_player_to_room),
+    path('rooms/<int:pk>/join', join_to_room),
 ]
