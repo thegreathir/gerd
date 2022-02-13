@@ -24,20 +24,27 @@ class Room4Detail(generics.RetrieveAPIView):
     serializer_class = Room4Serializer
 
 
-@transaction.atomic
+class RoomCapacityExceededError(Exception):
+    pass
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def join_to_room(request, pk):
     try:
-        room = Room4.objects.get(pk=pk)
+        with transaction.atomic():
+            room = Room4.objects.get(pk=pk)
+
+            if room.players.count() < 4:
+                room.players.add(request.user)
+                room.save()
+                # TODO: Notify other players in room
+                return Response(status=status.HTTP_200_OK)
+            else:
+                raise RoomCapacityExceededError()
     except Room4.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
-    
-    if room.players.count() < 4:
-        room.players.add(request.user)
-        room.save()
-        return Response(status=status.HTTP_200_OK)
-    else:
+    except RoomCapacityExceededError:
         return Response(data={
             'error': 'Maximum room capacity exceeded'
         }, status=status.HTTP_400_BAD_REQUEST)
