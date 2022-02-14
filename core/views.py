@@ -3,13 +3,15 @@ from django.shortcuts import get_object_or_404
 from rest_framework import generics, status
 from rest_framework.decorators import (api_view, parser_classes,
                                        permission_classes)
+from rest_framework.exceptions import (APIException, PermissionDenied,
+                                       ValidationError)
 from rest_framework.parsers import JSONParser
 from rest_framework.permissions import (IsAuthenticated,
                                         IsAuthenticatedOrReadOnly)
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from core.models import Room, Match
+from core.models import Match, Room
 from core.serializers import RoomSerializer
 
 
@@ -24,30 +26,22 @@ class RoomDetail(generics.RetrieveAPIView):
     serializer_class = RoomSerializer
 
 
-class RoomCapacityExceededError(Exception):
-    pass
-
-
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-def join_to_room(request, pk):
-    try:
-        with transaction.atomic():
-            room = Room.objects.get(pk=pk)
+def join_room(request, pk):
+    with transaction.atomic():
+        room = get_object_or_404(Room, pk=pk)
 
-            if room.players.count() < 4:
-                room.players.add(request.user)
-                room.save()
-                # TODO: Notify other players in room
-                return Response(status=status.HTTP_200_OK)
-            else:
-                raise RoomCapacityExceededError()
-    except Room.DoesNotExist:
-        return Response(status=status.HTTP_404_NOT_FOUND)
-    except RoomCapacityExceededError:
-        return Response(data={
-            'message': 'Maximum room capacity exceeded'
-        }, status=status.HTTP_400_BAD_REQUEST)
+        if room.players.filter(pk=request.user.pk).exists():
+            return Response(status=status.HTTP_200_OK)
+
+        if room.players.count() < 4:
+            room.players.add(request.user)
+            room.save()
+            # TODO: Notify other players in room
+            return Response(status=status.HTTP_200_OK)
+        else:
+            raise ValidationError(detail='Maximum room capacity exceeded')
 
 
 @api_view(['POST'])
@@ -55,19 +49,13 @@ def join_to_room(request, pk):
 def start_match(request, pk):
     room = get_object_or_404(Room, pk=pk)
     if not room.players.filter(pk=request.user.id).exists():
-        return Response(data={
-            'message': 'You are not member of this room'
-        }, status=status.HTTP_403_FORBIDDEN)
-    
+        raise PermissionDenied(detail='You are not member of this room')
+
     if room.players.count() < 4:
-        return Response(data={
-            'message': 'Not enough players have joined'
-        }, status=status.HTTP_400_BAD_REQUEST)
-    
+        raise ValidationError(detail='Not enough players have joined yet')
+
     if hasattr(room, 'match'):
-        return Response(data={
-            'message': 'Room\'s match is already started'
-        }, status=status.HTTP_400_BAD_REQUEST)
+        raise ValidationError(detail='Room\'s match is already started')
 
     match = Match(
         room=room,
