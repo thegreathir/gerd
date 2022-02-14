@@ -1,5 +1,5 @@
 from django.db import transaction
-from django.http import Http404
+from django.shortcuts import get_object_or_404
 from rest_framework import generics, status
 from rest_framework.decorators import (api_view, parser_classes,
                                        permission_classes)
@@ -9,7 +9,7 @@ from rest_framework.permissions import (IsAuthenticated,
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from core.models import Room
+from core.models import Room, Match
 from core.serializers import RoomSerializer
 
 
@@ -46,5 +46,35 @@ def join_to_room(request, pk):
         return Response(status=status.HTTP_404_NOT_FOUND)
     except RoomCapacityExceededError:
         return Response(data={
-            'error': 'Maximum room capacity exceeded'
+            'message': 'Maximum room capacity exceeded'
         }, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def start_match(request, pk):
+    room = get_object_or_404(Room, pk=pk)
+    if not room.players.filter(pk=request.user.id).exists():
+        return Response(data={
+            'message': 'You are not member of this room'
+        }, status=status.HTTP_403_FORBIDDEN)
+    
+    if room.players.count() < 4:
+        return Response(data={
+            'message': 'Not enough players have joined'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    if hasattr(room, 'match'):
+        return Response(data={
+            'message': 'Room\'s match is already started'
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    match = Match(
+        room=room,
+        state=Match.State.NEWBORN,
+        current_turn=0
+    )
+
+    match.save()
+    # TODO: Notify other players that match has been started
+    return Response(status=status.HTTP_200_OK)

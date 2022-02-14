@@ -9,12 +9,12 @@ from rest_framework.authtoken.models import Token
 class Word(models.Model):
     text = models.CharField(max_length=128)
 
-    class Compexity(models.IntegerChoices):
+    class Complexity(models.IntegerChoices):
         EASY = 1
         INTERMEDIATE = 2
         HARD = 3
 
-    compexity = models.IntegerField(choices=Compexity.choices)
+    complexity = models.IntegerField(choices=Complexity.choices)
 
 
 class Match(models.Model):
