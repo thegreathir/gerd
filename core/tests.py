@@ -1,5 +1,8 @@
+import json
+import random
+from typing import Dict
+
 from django.contrib.auth.models import User
-from django.test import TestCase
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -7,10 +10,53 @@ from rest_framework.test import APITestCase
 from core.models import Room
 
 
-class RoomCreateTestCase(APITestCase):
+class GerdTestCase(APITestCase):
     def setUp(self):
-        self.user = User.objects.create(
-            username='user1', password='p@@@@$w00rdd')
+        self.users: Dict[str, User] = dict()
+
+    def create_user(self, username: str = 'user') -> None:
+        if username in self.users.keys():
+            return
+
+        self.users[username] = User.objects.create(
+            username=username, password='p@@@@$w00rdd')
+
+    def create_sample_room(
+        self,
+        name: str = 'Room1',
+        creator: str = 'user'
+    ) -> None:
+        response = self.client.post(
+            reverse('rooms'),
+            data={
+                'name': name,
+                'players': []
+            },
+            HTTP_AUTHORIZATION=f'Token {self.users[creator].auth_token}',
+            format='json'
+        )
+
+        self.assertEqual(status.HTTP_201_CREATED, response.status_code)
+
+    def join_room(self, username: str, room_id: int = 1) -> None:
+        response = self.client.post(
+            reverse('join-room', args=[room_id]),
+            HTTP_AUTHORIZATION=f'Token {self.users[username].auth_token}',
+        )
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+
+    @staticmethod
+    def print_response_data(response):
+        print('\n')
+        print(json.dumps(response.data, indent=4))
+
+
+class RoomCreateTestCase(GerdTestCase):
+    def setUp(self):
+        super().setUp()
+
+        self.create_user()
+        self.user = self.users['user']
 
     def test_authenticated_user_can_create_room(self):
         response = self.client.post(
@@ -19,7 +65,7 @@ class RoomCreateTestCase(APITestCase):
                 'name': 'Room1',
                 'players': []
             },
-            HTTP_AUTHORIZATION=f"Token {self.user.auth_token}",
+            HTTP_AUTHORIZATION=f'Token {self.user.auth_token}',
             format='json'
         )
 
@@ -44,7 +90,7 @@ class RoomCreateTestCase(APITestCase):
                 'name': 'Room1',
                 'players': []
             },
-            HTTP_AUTHORIZATION=f"Token {self.user.auth_token}",
+            HTTP_AUTHORIZATION=f'Token {self.user.auth_token}',
             format='json'
         )
 
@@ -70,9 +116,9 @@ class RoomCreateTestCase(APITestCase):
             reverse('rooms'),
             data={
                 'name': 'Room1',
-                'players': ['user1']
+                'players': [self.user.username]
             },
-            HTTP_AUTHORIZATION=f"Token {self.user.auth_token}",
+            HTTP_AUTHORIZATION=f'Token {self.user.auth_token}',
             format='json'
         )
 
@@ -83,7 +129,7 @@ class RoomCreateTestCase(APITestCase):
         )
 
         self.assertEqual(status.HTTP_200_OK, response.status_code)
-        self.assertEqual(['user1'], response.data['players'])
+        self.assertEqual([self.user.username], response.data['players'])
 
     def test_user_can_not_add_not_existed_user_at_creation_time(self):
         response = self.client.post(
@@ -92,7 +138,7 @@ class RoomCreateTestCase(APITestCase):
                 'name': 'Room1',
                 'players': ['random_username']
             },
-            HTTP_AUTHORIZATION=f"Token {self.user.auth_token}",
+            HTTP_AUTHORIZATION=f'Token {self.user.auth_token}',
             format='json'
         )
 
@@ -100,52 +146,38 @@ class RoomCreateTestCase(APITestCase):
         self.assertEqual('does_not_exist', response.data['players'][0].code)
 
 
-class RoomJoinTestCase(APITestCase):
+class JoinRoomTestCase(GerdTestCase):
 
     def setUp(self):
-        self.user1 = User.objects.create(
-            username='user1', password='p@@@@$w00rdd')
-        self.user2 = User.objects.create(
-            username='user2', password='p@@@@$w00rdd')
-        self.user3 = User.objects.create(
-            username='user3', password='p@@@@$w00rdd')
-        self.user4 = User.objects.create(
-            username='user4', password='p@@@@$w00rdd')
-        self.user5 = User.objects.create(
-            username='user5', password='p@@@@$w00rdd')
+        super().setUp()
+        self.create_user(username='user1')
+        self.create_user(username='user2')
+        self.create_user(username='user3')
+        self.create_user(username='user4')
+        self.create_user(username='user5')
 
-        self.create_sample_room()
-
-    def create_sample_room(self, name='Room1'):
-        response = self.client.post(
-            reverse('rooms'),
-            data={
-                'name': name,
-                'players': []
-            },
-            HTTP_AUTHORIZATION=f"Token {self.user1.auth_token}",
-            format='json'
-        )
-
-        self.assertEqual(status.HTTP_201_CREATED, response.status_code)
+        for k, v in self.users.items():
+            setattr(self, k, v)
+        self.create_sample_room(creator='user1')
 
     def test_new_player_can_join_existed_room(self):
         response = self.client.post(
             reverse('join-room', args=[1]),
-            HTTP_AUTHORIZATION=f"Token {self.user2.auth_token}",
+            HTTP_AUTHORIZATION=f'Token {self.user2.auth_token}',
         )
 
         self.assertEqual(status.HTTP_200_OK, response.status_code)
-        self.assertTrue(Room.objects.get(pk=1).players.filter(username='user2').exists())
+        self.assertTrue(Room.objects.get(
+            pk=1).players.filter(username='user2').exists())
 
     def test_player_can_not_join_not_existed_room(self):
         response = self.client.post(
             reverse('join-room', args=[2]),
-            HTTP_AUTHORIZATION=f"Token {self.user2.auth_token}",
+            HTTP_AUTHORIZATION=f'Token {self.user2.auth_token}',
         )
 
         self.assertEqual(status.HTTP_404_NOT_FOUND, response.status_code)
-    
+
     def test_anonymous_user_can_not_join_any_room(self):
         response = self.client.post(
             reverse('join-room', args=[1]),
@@ -153,35 +185,106 @@ class RoomJoinTestCase(APITestCase):
 
         self.assertEqual(status.HTTP_401_UNAUTHORIZED, response.status_code)
 
-    def join(self, user):
-        response = self.client.post(
-            reverse('join-room', args=[1]),
-            HTTP_AUTHORIZATION=f"Token {user.auth_token}",
-        )
-        self.assertEqual(status.HTTP_200_OK, response.status_code)
-    
-    def test_over_4_user_can_not_join_a_single_room(self):
-        self.join(self.user1)
-        self.join(self.user2)
-        self.join(self.user3)
-        self.join(self.user4)
+    def test_over_4_players_can_not_join_a_single_room(self):
+        self.join_room('user1')
+        self.join_room('user2')
+        self.join_room('user3')
+        self.join_room('user4')
 
         response = self.client.post(
             reverse('join-room', args=[1]),
-            HTTP_AUTHORIZATION=f"Token {self.user5.auth_token}",
+            HTTP_AUTHORIZATION=f'Token {self.user5.auth_token}',
         )
         self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
-        self.assertIn('exceeded', response.data[0])
-    
+        self.assertIn('exceeded', response.data['detail'])
+
     def test_multiple_join_is_ok(self):
-        self.join(self.user1)
-        self.join(self.user1)
-        self.join(self.user1)
-        self.join(self.user2)
-        self.join(self.user3)
-        self.join(self.user4)
-        self.join(self.user4)
+        self.join_room('user1')
+        self.join_room('user1')
+        self.join_room('user1')
+        self.join_room('user2')
+        self.join_room('user3')
+        self.join_room('user4')
+        self.join_room('user4')
 
         self.assertEqual(4, Room.objects.get(pk=1).players.count())
 
 
+class StartMatchTestCase(GerdTestCase):
+
+    def setUp(self):
+        super().setUp()
+        for i in range(6):
+            self.create_user(username=f'user{i}')
+
+        self.create_sample_room(creator='user1')
+
+    def test_match_can_be_started_in_completed_room(self):
+        self.join_room('user1')
+        self.join_room('user2')
+        self.join_room('user3')
+        self.join_room('user4')
+
+        user_id: int = random.randint(1, 4)
+        token = self.users[f'user{user_id}'].auth_token
+        response = self.client.post(
+            reverse('start-room-match', args=[1]),
+            HTTP_AUTHORIZATION=f'Token {token}',
+        )
+
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+
+        response = self.client.get(
+            reverse('room-detail', args=[1])
+        )
+
+        self.assertIsNotNone(response.data['match'])
+        self.assertEqual(1, response.data['match']['state'])
+
+    def test_match_with_not_enough_players_can_not_be_started(self):
+        self.join_room('user1')
+        self.join_room('user2')
+        self.join_room('user3')
+
+        response = self.client.post(
+            reverse('start-room-match', args=[1]),
+            HTTP_AUTHORIZATION=f'Token {self.users["user1"].auth_token}',
+        )
+
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
+        self.assertIn('enough', response.data['detail'])
+
+    def test_not_joined_player_can_not_start_the_match(self):
+        self.join_room('user1')
+        self.join_room('user2')
+        self.join_room('user3')
+        self.join_room('user4')
+
+        response = self.client.post(
+            reverse('start-room-match', args=[1]),
+            HTTP_AUTHORIZATION=f'Token {self.users["user5"].auth_token}',
+        )
+
+        self.assertEqual(status.HTTP_403_FORBIDDEN, response.status_code)
+        self.assertIn('not member', response.data['detail'])
+
+    def test_match_can_not_be_started_twice(self):
+        self.join_room('user1')
+        self.join_room('user2')
+        self.join_room('user3')
+        self.join_room('user4')
+
+        response = self.client.post(
+            reverse('start-room-match', args=[1]),
+            HTTP_AUTHORIZATION=f'Token {self.users["user1"].auth_token}',
+        )
+
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+
+        response = self.client.post(
+            reverse('start-room-match', args=[1]),
+            HTTP_AUTHORIZATION=f'Token {self.users["user1"].auth_token}',
+        )
+
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
+        self.assertIn('started', response.data['detail'])

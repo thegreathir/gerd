@@ -1,5 +1,4 @@
 from django.conf import settings
-from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models.signals import post_save
 from django.dispatch import receiver
@@ -17,27 +16,36 @@ class Word(models.Model):
     complexity = models.IntegerField(choices=Complexity.choices)
 
 
+class SelectedWord(models.Model):
+    text = models.ForeignKey(Word, on_delete=models.CASCADE)
+    match = models.ForeignKey(
+        to='Match',
+        on_delete=models.CASCADE,
+        related_name='words',
+        related_query_name='word',
+    )
+
+
 class Match(models.Model):
     room = models.OneToOneField(
-        "Room",
+        'Room',
         on_delete=models.CASCADE,
         primary_key=True,
     )
 
-    words = models.ManyToManyField(
-        to=Word,
-        blank=True,
-    )
-
     class State(models.IntegerChoices):
         NEWBORN = 1
-        STARTED = 2
-        PAUSED = 3
+        PLAYING = 2
+        WAITING = 3
         FINISHED = 4
 
     state = models.IntegerField(choices=State.choices)
-    start_time = models.DateTimeField(blank=True, null=True)
+    round_start_time = models.DateTimeField(blank=True, null=True)
     current_turn = models.IntegerField(blank=True, null=True)
+    current_round = models.IntegerField(blank=True, null=True)
+
+    total_round_count = models.IntegerField(default=8)
+    round_duration_seconds = models.IntegerField(default=100)
 
 
 class Room(models.Model):

@@ -1,15 +1,11 @@
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, status
-from rest_framework.decorators import (api_view, parser_classes,
-                                       permission_classes)
-from rest_framework.exceptions import (APIException, PermissionDenied,
-                                       ValidationError)
-from rest_framework.parsers import JSONParser
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.exceptions import APIException, PermissionDenied
 from rest_framework.permissions import (IsAuthenticated,
                                         IsAuthenticatedOrReadOnly)
 from rest_framework.response import Response
-from rest_framework.views import APIView
 
 from core.models import Match, Room
 from core.serializers import RoomSerializer
@@ -24,6 +20,12 @@ class RoomList(generics.ListCreateAPIView):
 class RoomDetail(generics.RetrieveAPIView):
     queryset = Room.objects.all()
     serializer_class = RoomSerializer
+
+
+class LogicError(APIException):
+    status_code = 400
+    default_detail = 'Business logic error.'
+    default_code = 'logic_error'
 
 
 @api_view(['POST'])
@@ -41,7 +43,7 @@ def join_room(request, pk):
             # TODO: Notify other players in room
             return Response(status=status.HTTP_200_OK)
         else:
-            raise ValidationError(detail='Maximum room capacity exceeded')
+            raise LogicError(detail='Maximum room capacity exceeded')
 
 
 @api_view(['POST'])
@@ -52,15 +54,16 @@ def start_match(request, pk):
         raise PermissionDenied(detail='You are not member of this room')
 
     if room.players.count() < 4:
-        raise ValidationError(detail='Not enough players have joined yet')
+        raise LogicError(detail='Not enough players have joined yet')
 
     if hasattr(room, 'match'):
-        raise ValidationError(detail='Room\'s match is already started')
+        raise LogicError(detail='Room\'s match is already started')
 
     match = Match(
         room=room,
         state=Match.State.NEWBORN,
-        current_turn=0
+        current_turn=0,
+        current_round=0
     )
 
     match.save()
