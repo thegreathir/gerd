@@ -17,7 +17,7 @@ from django.contrib import admin
 from django.urls import path
 from rest_framework.authtoken import views
 
-from core.views import RoomList, RoomDetail, join_room, start_match
+from core.views import RoomList, RoomDetail, join_room, start_match, play
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -26,4 +26,5 @@ urlpatterns = [
     path('rooms/<int:pk>/', RoomDetail.as_view(), name='room-detail'),
     path('rooms/<int:pk>/join', join_room, name='join-room'),
     path('rooms/<int:pk>/start', start_match, name='start-room-match'),
+    path('rooms/<int:pk>/play', play, name='play'),
 ]

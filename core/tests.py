@@ -1,13 +1,14 @@
 import json
 import random
-from typing import Dict
+from typing import Dict, List, Tuple
+from copy import deepcopy
 
 from django.contrib.auth.models import User
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from core.models import Room
+from core.models import Room, Word, Match
 
 
 class GerdTestCase(APITestCase):
@@ -44,6 +45,18 @@ class GerdTestCase(APITestCase):
             HTTP_AUTHORIZATION=f'Token {self.users[username].auth_token}',
         )
         self.assertEqual(status.HTTP_200_OK, response.status_code)
+
+    def start_match(self, player: str = 'user', room_id: int = 1) -> None:
+        response = self.client.post(
+            reverse('start-room-match', args=[room_id]),
+            HTTP_AUTHORIZATION=f'Token {self.users[player].auth_token}',
+        )
+
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+
+    def create_words(self, words: List[Tuple[str, int]]) -> None:
+        for word, complexity in words:
+            Word.objects.create(text=word, complexity=complexity)
 
     @staticmethod
     def print_response_data(response):
@@ -288,3 +301,58 @@ class StartMatchTestCase(GerdTestCase):
 
         self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
         self.assertIn('started', response.data['detail'])
+
+
+class PlayMatchTestCase(GerdTestCase):
+
+    def setUp(self):
+        super().setUp()
+        self.words = [
+            ('multiply', random.randint(1, 3)),
+            ('abiding', random.randint(1, 3)),
+            ('mask', random.randint(1, 3)),
+            ('trace', random.randint(1, 3)),
+            ('selection', random.randint(1, 3)),
+            ('real', random.randint(1, 3)),
+            ('pop', random.randint(1, 3)),
+            ('protective', random.randint(1, 3)),
+            ('certain', random.randint(1, 3)),
+            ('second', random.randint(1, 3)),
+            ('silly', random.randint(1, 3)),
+            ('sign', random.randint(1, 3)),
+        ]
+        self.create_words(self.words)
+
+        for i in range(6):
+            self.create_user(username=f'user{i}')
+
+        self.create_sample_room(creator='user1')
+
+    def test_explaining_player_can_call_play(self):
+        self.join_room('user1')
+        self.join_room('user2')
+        self.join_room('user3')
+        self.join_room('user4')
+
+        self.start_match('user1')
+
+        response = self.client.get(reverse('room-detail', args=[1]))
+
+        players = deepcopy(response.data['players'])
+        players.sort()
+
+        explaining_player = players[response.data['match']['current_turn']]
+        token = self.users[explaining_player].auth_token
+        response = self.client.post(
+            reverse('play', args=[1]),
+            HTTP_AUTHORIZATION=f'Token {token}',
+        )
+
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        self.assertIn(response.data['word'], list(zip(*self.words))[0])
+        word = response.data['word']
+
+        response = self.client.get(reverse('room-detail', args=[1]))
+
+        self.assertEqual(word, response.data['match']['words'][0]['text'])
+        self.assertEqual(Match.State.PLAYING, response.data['match']['state'])

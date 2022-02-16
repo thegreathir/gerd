@@ -39,7 +39,7 @@ class RoomSerializer(serializers.ModelSerializer):
     players = serializers.SlugRelatedField(
         many=True,
         queryset=User.objects.all(),
-        slug_field='username'
+        slug_field='username',
     )
     match = MatchSerializer(many=False, read_only=True)
 
