@@ -44,8 +44,13 @@ class Match(models.Model):
     current_turn = models.IntegerField(blank=True, null=True)
     current_round = models.IntegerField(blank=True, null=True)
 
+    team_one_score = models.IntegerField(default=0)
+    team_two_score = models.IntegerField(default=0)
+
     total_round_count = models.IntegerField(default=8)
     round_duration_seconds = models.IntegerField(default=100)
+    correct_guess_score = models.IntegerField(default=3)
+    skip_penalty = models.IntegerField(default=1)
 
 
 class Room(models.Model):

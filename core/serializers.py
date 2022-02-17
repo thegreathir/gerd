@@ -31,7 +31,11 @@ class MatchSerializer(serializers.ModelSerializer):
             'current_turn',
             'current_round',
             'total_round_count',
-            'round_duration_seconds'
+            'round_duration_seconds',
+            'team_one_score',
+            'team_two_score',
+            'correct_guess_score',
+            'skip_penalty',
         ]
 
 

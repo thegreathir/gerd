@@ -1,9 +1,9 @@
 import random
 from typing import List
 from functools import cache
-from datetime import datetime
 
 from django.db import transaction
+from django.utils import timezone
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, status
 from rest_framework.decorators import api_view, permission_classes
@@ -104,9 +104,12 @@ def get_random_word() -> Word:
     return Word.objects.get(pk=indices[random.randint(0, len(indices) - 1)])
 
 
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def play(request, pk):
+def get_room_and_check_turn(
+        request,
+        pk,
+        expected_states: List[Match.State]
+):
+
     room = get_object_or_404(Room, pk=pk)
     players = room.players.values_list(
         'username', flat=True).order_by('username')
@@ -116,12 +119,24 @@ def play(request, pk):
     if not hasattr(room, 'match'):
         raise LogicError(detail='Room\'s match is not started yet')
 
-    if room.match.state != Match.State.NEWBORN and \
-            room.match.state != Match.State.WAITING:
-        raise LogicError(detail='State is not newborn nor waiting')
+    if room.match.state not in expected_states:
+        raise LogicError(
+            detail=f'Match\'s state is not in {expected_states}'
+        )
 
     if players[room.match.current_turn] != request.user.username:
         raise PermissionDenied(detail='This is not your turn')
+
+    return room
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def play(request, pk):
+    room = get_room_and_check_turn(request, pk, [
+        Match.State.NEWBORN,
+        Match.State.WAITING,
+    ])
 
     word = get_random_word()
     SelectedWord.objects.create(
@@ -130,8 +145,80 @@ def play(request, pk):
     )
 
     room.match.state = Match.State.PLAYING
-    room.match.round_start_time = datetime.now()
+    room.match.round_start_time = timezone.now()
     room.match.save()
+
+    # TODO: Notify others
+
+    # TODO: Schedule round ending task using channel and native `await`
+    # https://github.com/django/channels/issues/814#issuecomment-354708463
+
+    return Response(
+        status=status.HTTP_200_OK,
+        data={'word': word.text}
+    )
+
+
+def add_score_to_team(room: Room, score: int, save: bool = True) -> None:
+    team = None
+    if room.teams == Room.Teams.ONE_TWO__THREE_FOUR:
+        team = 0 if room.match.current_turn in [0, 1] else 1
+    elif room.teams == Room.Teams.ONE_THREE__TWO_FOUR:
+        team = 0 if room.match.current_turn in [0, 2] else 1
+    elif room.teams == Room.Teams.ONE_FOUR__TWO_THREE:
+        team = 0 if room.match.current_turn in [0, 3] else 1
+
+    if team is None:
+        return
+
+    if team == 0:
+        room.match.team_one_score += score
+    else:
+        room.match.team_two_score += score
+
+    if save:
+        room.match.save()
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def correct(request, pk):
+    room = get_room_and_check_turn(request, pk, [
+        Match.State.PLAYING,
+    ])
+
+    word = get_random_word()
+    SelectedWord.objects.create(
+        text=word,
+        match=room.match
+    )
+
+    add_score_to_team(room, room.match.correct_guess_score)
+
+    # TODO: Notify others
+
+    return Response(
+        status=status.HTTP_200_OK,
+        data={'word': word.text}
+    )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def skip(request, pk):
+    room = get_room_and_check_turn(request, pk, [
+        Match.State.PLAYING,
+    ])
+
+    word = get_random_word()
+    SelectedWord.objects.create(
+        text=word,
+        match=room.match
+    )
+
+    add_score_to_team(room, room.match.skip_penalty * -1)
+
+    # TODO: Notify others
 
     return Response(
         status=status.HTTP_200_OK,
