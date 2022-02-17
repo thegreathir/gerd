@@ -77,7 +77,7 @@ def start_match(request, pk):
 
 
 @cache
-def get_all_indices(complexity: int) -> List[int]:
+def get_words_all_indices(complexity: int) -> List[int]:
     """
     Following query result will be cached, so we should reload
     our web app after each time we modified `Word` table.
@@ -100,7 +100,7 @@ def get_random_word() -> Word:
         ],
         k=1
     )
-    indices = get_all_indices(complexity[0])
+    indices = get_words_all_indices(complexity[0])
     return Word.objects.get(pk=indices[random.randint(0, len(indices) - 1)])
 
 
