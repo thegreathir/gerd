@@ -16,12 +16,14 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path
 from rest_framework.authtoken import views
+from rest_framework.documentation import include_docs_urls
 
 from core.views import (RoomDetail, RoomList, correct, join_room, play, skip,
                         start_match)
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('docs/', include_docs_urls(title='Gerd API')),
     path('api-token-auth/', views.obtain_auth_token),
     path('rooms/', RoomList.as_view(), name='rooms'),
     path('rooms/<int:pk>/', RoomDetail.as_view(), name='room-detail'),

@@ -36,6 +36,9 @@ class LogicError(APIException):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def join_room(request, pk):
+    """
+    Enter authenticated player to room
+    """
     with transaction.atomic():
         room = get_object_or_404(Room, pk=pk)
 
@@ -54,6 +57,9 @@ def join_room(request, pk):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def start_match(request, pk):
+    """
+    Start a match and put it in `NEWBORN` state
+    """
     room = get_object_or_404(Room, pk=pk)
     if not room.players.filter(pk=request.user.id).exists():
         raise PermissionDenied(detail='You are not member of this room')
@@ -133,6 +139,14 @@ def get_room_and_check_turn(
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def play(request, pk):
+    """
+    Play match and return first word
+
+    Only the explaining player can call this endpoint.
+
+    Return: A simple word that explaining player should explain
+
+    """
     room = get_room_and_check_turn(request, pk, [
         Match.State.NEWBORN,
         Match.State.WAITING,
@@ -183,6 +197,14 @@ def add_score_to_team(room: Room, score: int, save: bool = True) -> None:
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def correct(request, pk):
+    """
+    Add correct guess score to explaining player's team and get next word
+
+    Only the explaining player can call this endpoint.
+
+    Return: A simple word that explaining player should explain as next word
+
+    """
     room = get_room_and_check_turn(request, pk, [
         Match.State.PLAYING,
     ])
@@ -206,6 +228,14 @@ def correct(request, pk):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def skip(request, pk):
+    """
+    Skip current guessing word and decrease playing team score by skip penalty
+
+    Only the explaining player can call this endpoint.
+
+    Return: A simple word that explaining player should explain as next word
+
+    """
     room = get_room_and_check_turn(request, pk, [
         Match.State.PLAYING,
     ])
