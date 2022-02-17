@@ -1,14 +1,14 @@
 import json
 import random
-from typing import Dict, List, Tuple
 from copy import deepcopy
+from typing import Dict, List, Tuple
 
 from django.contrib.auth.models import User
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from core.models import Room, Word, Match
+from core.models import Match, Room, Word
 
 
 class GerdTestCase(APITestCase):
@@ -320,6 +320,16 @@ class PlayMatchTestCase(GerdTestCase):
             ('second', random.randint(1, 3)),
             ('silly', random.randint(1, 3)),
             ('sign', random.randint(1, 3)),
+            ('redo', random.randint(1, 3)),
+            ('middle', random.randint(1, 3)),
+            ('stale', random.randint(1, 3)),
+            ('daily', random.randint(1, 3)),
+            ('labored', random.randint(1, 3)),
+            ('broken', random.randint(1, 3)),
+            ('parsimonious', random.randint(1, 3)),
+            ('bite', random.randint(1, 3)),
+            ('forecast', random.randint(1, 3)),
+            ('aquatic', random.randint(1, 3)),
         ]
         self.create_words(self.words)
 
@@ -366,8 +376,8 @@ class PlayMatchTestCase(GerdTestCase):
         self.assertEqual(word, response.data['match']['words'][0]['text'])
         self.assertEqual(Match.State.PLAYING, response.data['match']['state'])
 
-    def test_players_can_not_call_play_twice(self):
-        self.start_match('user1')
+    def start_and_play(self, starter: str = 'user1'):
+        self.start_match(starter)
 
         explaining_player = self.get_explaining_player()
 
@@ -378,7 +388,13 @@ class PlayMatchTestCase(GerdTestCase):
         )
 
         self.assertEqual(status.HTTP_200_OK, response.status_code)
+        return response
 
+    def test_players_can_not_call_play_twice(self):
+        self.start_and_play()
+
+        explaining_player = self.get_explaining_player()
+        token = self.users[explaining_player].auth_token
         response = self.client.post(
             reverse('play', args=[1]),
             HTTP_AUTHORIZATION=f'Token {token}',
@@ -388,24 +404,18 @@ class PlayMatchTestCase(GerdTestCase):
         self.assertIn('state', response.data['detail'])
 
     def test_explaining_player_can_call_correct(self):
-        self.start_match('user1')
+        response = self.start_and_play()
+        word1 = response.data['word']
 
         explaining_player = self.get_explaining_player()
-
         token = self.users[explaining_player].auth_token
-        response = self.client.post(
-            reverse('play', args=[1]),
-            HTTP_AUTHORIZATION=f'Token {token}',
-        )
-
-        self.assertEqual(status.HTTP_200_OK, response.status_code)
-
         response = self.client.post(
             reverse('correct', args=[1]),
             HTTP_AUTHORIZATION=f'Token {token}',
         )
 
         self.assertEqual(status.HTTP_200_OK, response.status_code)
+        word2 = response.data['word']
 
         response = self.get_room()
 
@@ -419,25 +429,21 @@ class PlayMatchTestCase(GerdTestCase):
             response.data['match']['team_two_score']
         )
 
+        self.assertEqual(word1, response.data['match']['words'][0]['text'])
+        self.assertEqual(word2, response.data['match']['words'][1]['text'])
+
     def test_explaining_player_can_call_skip(self):
-        self.start_match('user1')
+        self.start_and_play()
 
         explaining_player = self.get_explaining_player()
-
         token = self.users[explaining_player].auth_token
-        response = self.client.post(
-            reverse('play', args=[1]),
-            HTTP_AUTHORIZATION=f'Token {token}',
-        )
-
-        self.assertEqual(status.HTTP_200_OK, response.status_code)
-
         response = self.client.post(
             reverse('skip', args=[1]),
             HTTP_AUTHORIZATION=f'Token {token}',
         )
 
         self.assertEqual(status.HTTP_200_OK, response.status_code)
+        word = response.data['word']
 
         response = self.get_room()
 
@@ -450,3 +456,44 @@ class PlayMatchTestCase(GerdTestCase):
             0,
             response.data['match']['team_two_score']
         )
+        self.assertEqual(word, response.data['match']['words'][-1]['text'])
+
+    def test_not_explaining_player_can_not_call_correct(self):
+        self.start_and_play()
+
+        response = self.get_room(1)
+
+        players = deepcopy(response.data['players'])
+        players.sort()
+
+        not_explaining_player = players[
+            (response.data['match']['current_turn'] + 1) % 4
+        ]
+
+        token = self.users[not_explaining_player].auth_token
+        response = self.client.post(
+            reverse('correct', args=[1]),
+            HTTP_AUTHORIZATION=f'Token {token}',
+        )
+
+        self.assertEqual(status.HTTP_403_FORBIDDEN, response.status_code)
+
+    def test_not_explaining_player_can_not_call_skip(self):
+        self.start_and_play()
+
+        response = self.get_room(1)
+
+        players = deepcopy(response.data['players'])
+        players.sort()
+
+        not_explaining_player = players[
+            (response.data['match']['current_turn'] + 1) % 4
+        ]
+
+        token = self.users[not_explaining_player].auth_token
+        response = self.client.post(
+            reverse('skip', args=[1]),
+            HTTP_AUTHORIZATION=f'Token {token}',
+        )
+
+        self.assertEqual(status.HTTP_403_FORBIDDEN, response.status_code)

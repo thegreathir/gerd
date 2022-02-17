@@ -1,7 +1,7 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers
 
-from core.models import Room, Match, SelectedWord
+from core.models import Match, Room, SelectedWord
 
 
 class SelectedWordSerializer(serializers.ModelSerializer):
