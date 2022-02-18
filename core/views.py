@@ -286,4 +286,5 @@ def rearrange(request, pk):
     room.teams = teams
     room.save()
 
+    # TODO: Notify others that teams changed
     return Response(status=status.HTTP_200_OK)

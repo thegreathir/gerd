@@ -283,6 +283,61 @@ class RearrangeTestCase(GerdTestCase):
         self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
         self.assertIn('integer', response.data['teams'])
 
+    def test_player_can_not_rearrange_when_match_is_started(self):
+        self.join_room('user1')
+        self.join_room('user2')
+        self.join_room('user3')
+        self.join_room('user4')
+
+        self.start_match(player='user1')
+
+        response = self.client.post(
+            reverse('rearrange', args=[1]),
+            data={
+                'teams': 2
+            },
+            format='json',
+            HTTP_AUTHORIZATION=f'Token {self.users["user1"].auth_token}',
+        )
+
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
+        self.assertIn('started', response.data['detail'])
+
+    def test_player_can_not_rearrange_when_not_enough_players_joined(self):
+        self.join_room('user1')
+        self.join_room('user2')
+        self.join_room('user3')
+
+        response = self.client.post(
+            reverse('rearrange', args=[1]),
+            data={
+                'teams': 2
+            },
+            format='json',
+            HTTP_AUTHORIZATION=f'Token {self.users["user1"].auth_token}',
+        )
+
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
+        self.assertIn('joined', response.data['detail'])
+
+    def test_not_joined_player_can_not_rearrange(self):
+        self.join_room('user1')
+        self.join_room('user2')
+        self.join_room('user3')
+        self.join_room('user4')
+
+        response = self.client.post(
+            reverse('rearrange', args=[1]),
+            data={
+                'teams': 2
+            },
+            format='json',
+            HTTP_AUTHORIZATION=f'Token {self.users["user5"].auth_token}',
+        )
+
+        self.assertEqual(status.HTTP_403_FORBIDDEN, response.status_code)
+        self.assertIn('member', response.data['detail'])
+
 
 class StartMatchTestCase(GerdTestCase):
 
