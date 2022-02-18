@@ -7,7 +7,8 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.exceptions import APIException, PermissionDenied
+from rest_framework.exceptions import (APIException, PermissionDenied,
+                                       ValidationError)
 from rest_framework.permissions import (IsAuthenticated,
                                         IsAuthenticatedOrReadOnly)
 from rest_framework.response import Response
@@ -254,3 +255,35 @@ def skip(request, pk):
         status=status.HTTP_200_OK,
         data={'word': word.text}
     )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def rearrange(request, pk):
+    """
+    Rearrange the player to different teams
+    """
+    room = get_object_or_404(Room, pk=pk)
+    if not room.players.filter(pk=request.user.id).exists():
+        raise PermissionDenied(detail='You are not member of this room')
+
+    if room.players.count() < 4:
+        raise LogicError(detail='Not enough players have joined yet')
+
+    if hasattr(room, 'match'):
+        raise LogicError(detail='Room\'s match is already started')
+
+    teams = request.data.get('teams', None)
+    if not teams or type(teams) != int or teams not in [
+        Room.Teams.ONE_TWO__THREE_FOUR,
+        Room.Teams.ONE_THREE__TWO_FOUR,
+        Room.Teams.ONE_FOUR__TWO_THREE,
+    ]:
+        raise ValidationError({
+            'teams': 'should be integer and between 0 to 2 inclusive'
+        })
+
+    room.teams = teams
+    room.save()
+
+    return Response(status=status.HTTP_200_OK)

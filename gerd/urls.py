@@ -18,8 +18,8 @@ from django.urls import path
 from rest_framework.authtoken import views
 from rest_framework.documentation import include_docs_urls
 
-from core.views import (RoomDetail, RoomList, correct, join_room, play, skip,
-                        start_match)
+from core.views import (RoomDetail, RoomList, correct, join_room, play,
+                        rearrange, skip, start_match)
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -32,4 +32,5 @@ urlpatterns = [
     path('rooms/<int:pk>/play', play, name='play'),
     path('rooms/<int:pk>/correct', correct, name='correct'),
     path('rooms/<int:pk>/skip', skip, name='skip'),
+    path('rooms/<int:pk>/rearrange', rearrange, name='rearrange'),
 ]

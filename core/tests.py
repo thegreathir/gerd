@@ -223,6 +223,67 @@ class JoinRoomTestCase(GerdTestCase):
         self.assertEqual(4, Room.objects.get(pk=1).players.count())
 
 
+class RearrangeTestCase(GerdTestCase):
+
+    def setUp(self):
+        super().setUp()
+        for i in range(6):
+            self.create_user(username=f'user{i}')
+
+        self.create_sample_room(creator='user1')
+
+    def test_joined_player_can_rearrange_teams_of_completed_room(self):
+        self.join_room('user1')
+        self.join_room('user2')
+        self.join_room('user3')
+        self.join_room('user4')
+
+        new_teams = random.randint(1, 2)
+        response = self.client.post(
+            reverse('rearrange', args=[1]),
+            data={
+                'teams': new_teams
+            },
+            format='json',
+            HTTP_AUTHORIZATION=f'Token {self.users["user1"].auth_token}',
+        )
+
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        self.assertEqual(Room.objects.get(pk=1).teams, new_teams)
+
+    def test_joined_player_can_not_rearrange_with_invalid_input(self):
+        self.join_room('user1')
+        self.join_room('user2')
+        self.join_room('user3')
+        self.join_room('user4')
+
+        new_teams = 10
+        response = self.client.post(
+            reverse('rearrange', args=[1]),
+            data={
+                'teams': new_teams
+            },
+            format='json',
+            HTTP_AUTHORIZATION=f'Token {self.users["user1"].auth_token}',
+        )
+
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
+        self.assertIn('between', response.data['teams'])
+
+        new_teams = 'two'
+        response = self.client.post(
+            reverse('rearrange', args=[1]),
+            data={
+                'teams': new_teams
+            },
+            format='json',
+            HTTP_AUTHORIZATION=f'Token {self.users["user1"].auth_token}',
+        )
+
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
+        self.assertIn('integer', response.data['teams'])
+
+
 class StartMatchTestCase(GerdTestCase):
 
     def setUp(self):
