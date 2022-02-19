@@ -9,11 +9,13 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from core.models import Match, Room, Word
+from core.views import get_words_all_indices
 
 
 class GerdTestCase(APITestCase):
     def setUp(self):
         self.users: Dict[str, User] = dict()
+        get_words_all_indices.cache_clear()
 
     def create_user(self, username: str = 'user') -> None:
         if username in self.users.keys():
@@ -57,6 +59,9 @@ class GerdTestCase(APITestCase):
     def create_words(self, words: List[Tuple[str, int]]) -> None:
         for word, complexity in words:
             Word.objects.create(text=word, complexity=complexity)
+
+    def remove_words(self) -> None:
+        Word.objects.all().delete()
 
     @staticmethod
     def print_response_data(response):
@@ -471,6 +476,21 @@ class PlayMatchTestCase(GerdTestCase):
         players.sort()
 
         return players[response.data['match']['current_turn']]
+
+    def test_explaining_player_cannot_play_with_no_words(self):
+        self.remove_words()
+        self.start_match('user1')
+
+        explaining_player = self.get_explaining_player()
+
+        token = self.users[explaining_player].auth_token
+        response = self.client.post(
+            reverse('play', args=[1]),
+            HTTP_AUTHORIZATION=f'Token {token}',
+        )
+
+        self.assertEqual(status.HTTP_503_SERVICE_UNAVAILABLE,
+                         response.status_code)
 
     def test_explaining_player_can_call_play(self):
         self.start_match('user1')

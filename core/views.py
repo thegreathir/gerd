@@ -34,6 +34,12 @@ class LogicError(APIException):
     default_code = 'logic_error'
 
 
+class WordSetupError(APIException):
+    status_code = 503
+    default_detail = 'words are not available at the moment'
+    default_code = 'words_unavailable'
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def join_room(request, pk):
@@ -108,6 +114,8 @@ def get_random_word() -> Word:
         k=1
     )
     indices = get_words_all_indices(complexity[0])
+    if len(indices) == 0:
+        raise WordSetupError()
     return Word.objects.get(pk=indices[random.randint(0, len(indices) - 1)])
 
 
