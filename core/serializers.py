@@ -1,7 +1,7 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers
 
-from core.models import Room, Match, SelectedWord
+from core.models import Match, Room, SelectedWord
 
 
 class SelectedWordSerializer(serializers.ModelSerializer):
@@ -31,7 +31,11 @@ class MatchSerializer(serializers.ModelSerializer):
             'current_turn',
             'current_round',
             'total_round_count',
-            'round_duration_seconds'
+            'round_duration_seconds',
+            'team_one_score',
+            'team_two_score',
+            'correct_guess_score',
+            'skip_penalty',
         ]
 
 
@@ -39,7 +43,7 @@ class RoomSerializer(serializers.ModelSerializer):
     players = serializers.SlugRelatedField(
         many=True,
         queryset=User.objects.all(),
-        slug_field='username'
+        slug_field='username',
     )
     match = MatchSerializer(many=False, read_only=True)
 

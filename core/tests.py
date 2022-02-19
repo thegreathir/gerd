@@ -1,18 +1,21 @@
 import json
 import random
-from typing import Dict
+from copy import deepcopy
+from typing import Dict, List, Tuple
 
 from django.contrib.auth.models import User
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from core.models import Room
+from core.models import Match, Room, Word
+from core.views import get_words_all_indices
 
 
 class GerdTestCase(APITestCase):
     def setUp(self):
         self.users: Dict[str, User] = dict()
+        get_words_all_indices.cache_clear()
 
     def create_user(self, username: str = 'user') -> None:
         if username in self.users.keys():
@@ -44,6 +47,21 @@ class GerdTestCase(APITestCase):
             HTTP_AUTHORIZATION=f'Token {self.users[username].auth_token}',
         )
         self.assertEqual(status.HTTP_200_OK, response.status_code)
+
+    def start_match(self, player: str = 'user', room_id: int = 1) -> None:
+        response = self.client.post(
+            reverse('start-room-match', args=[room_id]),
+            HTTP_AUTHORIZATION=f'Token {self.users[player].auth_token}',
+        )
+
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+
+    def create_words(self, words: List[Tuple[str, int]]) -> None:
+        for word, complexity in words:
+            Word.objects.create(text=word, complexity=complexity)
+
+    def remove_words(self) -> None:
+        Word.objects.all().delete()
 
     @staticmethod
     def print_response_data(response):
@@ -210,6 +228,122 @@ class JoinRoomTestCase(GerdTestCase):
         self.assertEqual(4, Room.objects.get(pk=1).players.count())
 
 
+class RearrangeTestCase(GerdTestCase):
+
+    def setUp(self):
+        super().setUp()
+        for i in range(6):
+            self.create_user(username=f'user{i}')
+
+        self.create_sample_room(creator='user1')
+
+    def test_joined_player_can_rearrange_teams_of_completed_room(self):
+        self.join_room('user1')
+        self.join_room('user2')
+        self.join_room('user3')
+        self.join_room('user4')
+
+        new_teams = random.randint(1, 2)
+        response = self.client.post(
+            reverse('rearrange', args=[1]),
+            data={
+                'teams': new_teams
+            },
+            format='json',
+            HTTP_AUTHORIZATION=f'Token {self.users["user1"].auth_token}',
+        )
+
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        self.assertEqual(Room.objects.get(pk=1).teams, new_teams)
+
+    def test_joined_player_can_not_rearrange_with_invalid_input(self):
+        self.join_room('user1')
+        self.join_room('user2')
+        self.join_room('user3')
+        self.join_room('user4')
+
+        new_teams = 10
+        response = self.client.post(
+            reverse('rearrange', args=[1]),
+            data={
+                'teams': new_teams
+            },
+            format='json',
+            HTTP_AUTHORIZATION=f'Token {self.users["user1"].auth_token}',
+        )
+
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
+        self.assertIn('between', response.data['teams'])
+
+        new_teams = 'two'
+        response = self.client.post(
+            reverse('rearrange', args=[1]),
+            data={
+                'teams': new_teams
+            },
+            format='json',
+            HTTP_AUTHORIZATION=f'Token {self.users["user1"].auth_token}',
+        )
+
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
+        self.assertIn('integer', response.data['teams'])
+
+    def test_player_can_not_rearrange_when_match_is_started(self):
+        self.join_room('user1')
+        self.join_room('user2')
+        self.join_room('user3')
+        self.join_room('user4')
+
+        self.start_match(player='user1')
+
+        response = self.client.post(
+            reverse('rearrange', args=[1]),
+            data={
+                'teams': 2
+            },
+            format='json',
+            HTTP_AUTHORIZATION=f'Token {self.users["user1"].auth_token}',
+        )
+
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
+        self.assertIn('started', response.data['detail'])
+
+    def test_player_can_not_rearrange_when_not_enough_players_joined(self):
+        self.join_room('user1')
+        self.join_room('user2')
+        self.join_room('user3')
+
+        response = self.client.post(
+            reverse('rearrange', args=[1]),
+            data={
+                'teams': 2
+            },
+            format='json',
+            HTTP_AUTHORIZATION=f'Token {self.users["user1"].auth_token}',
+        )
+
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
+        self.assertIn('joined', response.data['detail'])
+
+    def test_not_joined_player_can_not_rearrange(self):
+        self.join_room('user1')
+        self.join_room('user2')
+        self.join_room('user3')
+        self.join_room('user4')
+
+        response = self.client.post(
+            reverse('rearrange', args=[1]),
+            data={
+                'teams': 2
+            },
+            format='json',
+            HTTP_AUTHORIZATION=f'Token {self.users["user5"].auth_token}',
+        )
+
+        self.assertEqual(status.HTTP_403_FORBIDDEN, response.status_code)
+        self.assertIn('member', response.data['detail'])
+
+
 class StartMatchTestCase(GerdTestCase):
 
     def setUp(self):
@@ -288,3 +422,214 @@ class StartMatchTestCase(GerdTestCase):
 
         self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
         self.assertIn('started', response.data['detail'])
+
+
+class PlayMatchTestCase(GerdTestCase):
+
+    def setUp(self):
+        super().setUp()
+        self.words = [
+            ('multiply', random.randint(1, 3)),
+            ('abiding', random.randint(1, 3)),
+            ('mask', random.randint(1, 3)),
+            ('trace', random.randint(1, 3)),
+            ('selection', random.randint(1, 3)),
+            ('real', random.randint(1, 3)),
+            ('pop', random.randint(1, 3)),
+            ('protective', random.randint(1, 3)),
+            ('certain', random.randint(1, 3)),
+            ('second', random.randint(1, 3)),
+            ('silly', random.randint(1, 3)),
+            ('sign', random.randint(1, 3)),
+            ('redo', random.randint(1, 3)),
+            ('middle', random.randint(1, 3)),
+            ('stale', random.randint(1, 3)),
+            ('daily', random.randint(1, 3)),
+            ('labored', random.randint(1, 3)),
+            ('broken', random.randint(1, 3)),
+            ('parsimonious', random.randint(1, 3)),
+            ('bite', random.randint(1, 3)),
+            ('forecast', random.randint(1, 3)),
+            ('aquatic', random.randint(1, 3)),
+        ]
+        self.create_words(self.words)
+
+        for i in range(6):
+            self.create_user(username=f'user{i}')
+
+        self.create_sample_room(creator='user1')
+
+        self.join_room('user1')
+        self.join_room('user2')
+        self.join_room('user3')
+        self.join_room('user4')
+
+    def get_room(self, room_id: int = 1):
+        response = self.client.get(reverse('room-detail', args=[room_id]))
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        return response
+
+    def get_explaining_player(self, room_id: int = 1):
+        response = self.get_room(room_id)
+
+        players = deepcopy(response.data['players'])
+        players.sort()
+
+        return players[response.data['match']['current_turn']]
+
+    def test_explaining_player_cannot_play_with_no_words(self):
+        self.remove_words()
+        self.start_match('user1')
+
+        explaining_player = self.get_explaining_player()
+
+        token = self.users[explaining_player].auth_token
+        response = self.client.post(
+            reverse('play', args=[1]),
+            HTTP_AUTHORIZATION=f'Token {token}',
+        )
+
+        self.assertEqual(status.HTTP_503_SERVICE_UNAVAILABLE,
+                         response.status_code)
+
+    def test_explaining_player_can_call_play(self):
+        self.start_match('user1')
+
+        explaining_player = self.get_explaining_player()
+
+        token = self.users[explaining_player].auth_token
+        response = self.client.post(
+            reverse('play', args=[1]),
+            HTTP_AUTHORIZATION=f'Token {token}',
+        )
+
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        self.assertIn(response.data['word'], list(zip(*self.words))[0])
+        word = response.data['word']
+
+        response = self.client.get(reverse('room-detail', args=[1]))
+
+        self.assertEqual(word, response.data['match']['words'][0]['text'])
+        self.assertEqual(Match.State.PLAYING, response.data['match']['state'])
+
+    def start_and_play(self, starter: str = 'user1'):
+        self.start_match(starter)
+
+        explaining_player = self.get_explaining_player()
+
+        token = self.users[explaining_player].auth_token
+        response = self.client.post(
+            reverse('play', args=[1]),
+            HTTP_AUTHORIZATION=f'Token {token}',
+        )
+
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        return response
+
+    def test_players_can_not_call_play_twice(self):
+        self.start_and_play()
+
+        explaining_player = self.get_explaining_player()
+        token = self.users[explaining_player].auth_token
+        response = self.client.post(
+            reverse('play', args=[1]),
+            HTTP_AUTHORIZATION=f'Token {token}',
+        )
+
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
+        self.assertIn('state', response.data['detail'])
+
+    def test_explaining_player_can_call_correct(self):
+        response = self.start_and_play()
+        word1 = response.data['word']
+
+        explaining_player = self.get_explaining_player()
+        token = self.users[explaining_player].auth_token
+        response = self.client.post(
+            reverse('correct', args=[1]),
+            HTTP_AUTHORIZATION=f'Token {token}',
+        )
+
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        word2 = response.data['word']
+
+        response = self.get_room()
+
+        self.assertEqual(
+            Room.objects.get(pk=1).match.correct_guess_score,
+            response.data['match']['team_one_score']
+        )
+
+        self.assertEqual(
+            0,
+            response.data['match']['team_two_score']
+        )
+
+        self.assertEqual(word1, response.data['match']['words'][0]['text'])
+        self.assertEqual(word2, response.data['match']['words'][1]['text'])
+
+    def test_explaining_player_can_call_skip(self):
+        self.start_and_play()
+
+        explaining_player = self.get_explaining_player()
+        token = self.users[explaining_player].auth_token
+        response = self.client.post(
+            reverse('skip', args=[1]),
+            HTTP_AUTHORIZATION=f'Token {token}',
+        )
+
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        word = response.data['word']
+
+        response = self.get_room()
+
+        self.assertEqual(
+            Room.objects.get(pk=1).match.skip_penalty * -1,
+            response.data['match']['team_one_score']
+        )
+
+        self.assertEqual(
+            0,
+            response.data['match']['team_two_score']
+        )
+        self.assertEqual(word, response.data['match']['words'][-1]['text'])
+
+    def test_not_explaining_player_can_not_call_correct(self):
+        self.start_and_play()
+
+        response = self.get_room(1)
+
+        players = deepcopy(response.data['players'])
+        players.sort()
+
+        not_explaining_player = players[
+            (response.data['match']['current_turn'] + 1) % 4
+        ]
+
+        token = self.users[not_explaining_player].auth_token
+        response = self.client.post(
+            reverse('correct', args=[1]),
+            HTTP_AUTHORIZATION=f'Token {token}',
+        )
+
+        self.assertEqual(status.HTTP_403_FORBIDDEN, response.status_code)
+
+    def test_not_explaining_player_can_not_call_skip(self):
+        self.start_and_play()
+
+        response = self.get_room(1)
+
+        players = deepcopy(response.data['players'])
+        players.sort()
+
+        not_explaining_player = players[
+            (response.data['match']['current_turn'] + 1) % 4
+        ]
+
+        token = self.users[not_explaining_player].auth_token
+        response = self.client.post(
+            reverse('skip', args=[1]),
+            HTTP_AUTHORIZATION=f'Token {token}',
+        )
+
+        self.assertEqual(status.HTTP_403_FORBIDDEN, response.status_code)
