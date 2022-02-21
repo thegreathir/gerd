@@ -15,6 +15,9 @@ class Word(models.Model):
 
     complexity = models.IntegerField(choices=Complexity.choices)
 
+    def __str__(self):
+        return self.text
+
 
 class SelectedWord(models.Model):
     text = models.ForeignKey(Word, on_delete=models.CASCADE)
