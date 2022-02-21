@@ -16,7 +16,6 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-
         try:
             words_df: pd.DataFrame = pd.read_csv(
                 options['csv_file']
