@@ -5,6 +5,8 @@ from datetime import datetime, timedelta
 from functools import cache
 from typing import List
 
+import jwt
+from django.conf import settings
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -327,3 +329,28 @@ def rearrange(request, pk):
 
     # TODO: Notify others that teams changed
     return Response(status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_ticket(request, pk):
+    room = get_object_or_404(Room, pk=pk)
+    if not room.players.filter(pk=request.user.id).exists():
+        raise PermissionDenied(detail='You are not member of this room')
+
+    return Response(
+        status=status.HTTP_200_OK,
+        data={
+            'ticket': jwt.encode(
+                payload={
+                    'room': pk,
+                    'username': request.user.username,
+                    'exp': datetime.now(tz=timezone.utc) + timedelta(
+                        seconds=settings.TICKET_VALIDITY_PERIOD_SECONDS
+                    )
+                },
+                key=settings.TICKET_SECRET,
+                algorithm="HS256"
+            )
+        }
+    )

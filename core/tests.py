@@ -2,11 +2,15 @@ import json
 import random
 import time
 from copy import deepcopy
+from datetime import datetime, timedelta
 from typing import Dict, List, Tuple
 from unittest import mock
 
+import jwt
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase, APITransactionTestCase
 
@@ -386,6 +390,53 @@ class RearrangeTestCase(get_equipped_test_case()):
 
         self.assertEqual(status.HTTP_403_FORBIDDEN, response.status_code)
         self.assertIn('member', response.data['detail'])
+
+
+class GetTicketTestCase(get_equipped_test_case()):
+
+    def setUp(self):
+        super().setUp()
+        for i in range(6):
+            self.create_user(username=f'user{i}')
+
+        self.create_sample_room(creator='user1')
+
+    def test_joined_player_can_get_valid_ticket(self):
+        self.join_room('user1')
+        response = self.client.get(
+            reverse('get_ticket', args=[1]),
+            HTTP_AUTHORIZATION=f'Token {self.users["user1"].auth_token}',
+        )
+
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+
+        ticket = jwt.decode(
+            response.data['ticket'],
+            key=settings.TICKET_SECRET,
+            algorithms='HS256'
+        )
+        self.assertEqual(ticket['room'], 1)
+        self.assertEqual(ticket['username'], 'user1')
+
+        now = datetime.now(tz=timezone.utc)
+        self.assertGreater(
+            datetime.fromtimestamp(ticket['exp'], tz=timezone.utc),
+            now
+        )
+        self.assertLess(
+            datetime.fromtimestamp(ticket['exp'], tz=timezone.utc),
+            now + timedelta(
+                seconds=settings.TICKET_VALIDITY_PERIOD_SECONDS
+            )
+        )
+
+    def test_not_joined_player_can_not_get_ticket(self):
+        response = self.client.get(
+            reverse('get_ticket', args=[1]),
+            HTTP_AUTHORIZATION=f'Token {self.users["user1"].auth_token}',
+        )
+
+        self.assertEqual(status.HTTP_403_FORBIDDEN, response.status_code)
 
 
 class StartMatchTestCase(get_equipped_test_case()):
