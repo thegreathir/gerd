@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from functools import cache
 from typing import List
 
-from django.db import transaction
+from django.db import close_old_connections, transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import generics, status
@@ -167,6 +167,8 @@ def finish_round(on: datetime, room_id: int) -> None:
         room.match.save()
     except Exception:
         pass
+    finally:
+        close_old_connections()
 
 
 @api_view(['POST'])
