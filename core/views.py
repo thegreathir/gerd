@@ -1,8 +1,11 @@
 import random
+import threading
+import time
+from datetime import datetime, timedelta
 from functools import cache
 from typing import List
 
-from django.db import transaction
+from django.db import close_old_connections, transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import generics, status
@@ -81,7 +84,7 @@ def start_match(request, pk):
         room=room,
         state=Match.State.NEWBORN,
         current_turn=0,
-        current_round=0
+        current_round=1
     )
 
     match.save()
@@ -145,6 +148,29 @@ def get_room_and_check_turn(
     return room
 
 
+def finish_round(on: datetime, room_id: int) -> None:
+    time.sleep((on - timezone.now()).seconds)
+    try:
+        room = Room.objects.get(pk=room_id)
+
+        if not hasattr(room, 'match'):
+            return
+
+        if room.match.current_round == room.match.total_round_count:
+            room.match.state = Match.State.FINISHED
+        else:
+            room.match.current_turn = (room.match.current_turn + 1) % 4
+            room.match.current_round += 1
+            room.match.state = Match.State.WAITING
+
+        # TODO: Notify others
+        room.match.save()
+    except Exception:
+        pass
+    finally:
+        close_old_connections()
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def play(request, pk):
@@ -173,8 +199,15 @@ def play(request, pk):
 
     # TODO: Notify others
 
-    # TODO: Schedule round ending task using channel and native `await`
-    # https://github.com/django/channels/issues/814#issuecomment-354708463
+    threading.Thread(
+        target=finish_round,
+        args=(
+            room.match.round_start_time + timedelta(
+                seconds=room.match.round_duration_seconds
+            ),
+            pk
+        )
+    ).start()
 
     return Response(
         status=status.HTTP_200_OK,
