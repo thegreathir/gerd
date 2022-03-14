@@ -1,3 +1,4 @@
+import asyncio
 import json
 import random
 import time
@@ -787,6 +788,8 @@ class PushNotificationTestCase(get_equipped_test_case(APITransactionTestCase)):
         for communicator in self.communicators:
             await communicator.disconnect()
 
+        self.communicators.clear()
+
     async def get_ticket(self, username):
         response = await self.async_client.get(
             reverse('get_ticket', args=[1]),
@@ -838,5 +841,92 @@ class PushNotificationTestCase(get_equipped_test_case(APITransactionTestCase)):
         self.assertIn('user1', push1['data']['players'])
         self.assertIn('user2', push1['data']['players'])
         self.assertIn('user3', push1['data']['players'])
+
+        await self.clear()
+
+    async def gather_all_pushes(self, expected_communicators_count=4):
+        self.assertEqual(
+            expected_communicators_count,
+            len(self.communicators)
+        )
+        pushes = [
+            await communicator.receive_json_from()
+            for communicator in self.communicators
+        ]
+
+        self.assertEqual(1, len(set(list([
+            json.dumps(x) for x in pushes
+        ]))))
+
+        return pushes[0]
+
+    async def test_match_push_notification(self):
+
+        await sync_to_async(self.create_sample_room)(creator='user1')
+
+        await sync_to_async(self.join_room)('user1')
+        await sync_to_async(self.join_room)('user2')
+        await sync_to_async(self.join_room)('user3')
+        await sync_to_async(self.join_room)('user4')
+
+        await sync_to_async(self.create_words)(self.words)
+
+        await self.get_communicator(1, 'user1')
+        await self.get_communicator(1, 'user2')
+        await self.get_communicator(1, 'user3')
+        await self.get_communicator(1, 'user4')
+
+        await sync_to_async(self.start_match)('user1')
+
+        push = await self.gather_all_pushes()
+        self.assertIsNotNone(push['data']['match'])
+
+        @database_sync_to_async
+        def modify_match():
+            round_duration = 10
+            total_round = random.randint(5, 10)
+            match = Match.objects.get(pk=1)
+            match.round_duration_seconds = round_duration
+            match.total_round_count = total_round
+            match.save()
+
+        await modify_match()
+
+        explaining_player = await sync_to_async(self.get_explaining_player)()
+        response = await self.async_client.post(
+            reverse('play', args=[1]),
+            AUTHORIZATION=f'Token {self.users[explaining_player].auth_token}',
+        )
+
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+
+        push = await self.gather_all_pushes()
+        self.assertEqual(1, len(push['data']['match']['words']))
+        self.assertEqual(Match.State.PLAYING, push['data']['match']['state'])
+
+        response = await self.async_client.post(
+            reverse('skip', args=[1]),
+            AUTHORIZATION=f'Token {self.users[explaining_player].auth_token}',
+        )
+
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+
+        push = await self.gather_all_pushes()
+        self.assertEqual(2, len(push['data']['match']['words']))
+
+        response = await self.async_client.post(
+            reverse('correct', args=[1]),
+            AUTHORIZATION=f'Token {self.users[explaining_player].auth_token}',
+        )
+
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+
+        push = await self.gather_all_pushes()
+        self.assertEqual(3, len(push['data']['match']['words']))
+
+        await asyncio.sleep(10)
+
+        push = await self.gather_all_pushes()
+        self.assertEqual(Match.State.WAITING, push['data']['match']['state'])
 
         await self.clear()

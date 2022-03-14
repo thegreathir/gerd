@@ -19,7 +19,9 @@ import environ
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 env = environ.Env(
-    DEBUG=(bool, True)
+    DEBUG=(bool, True),
+    REDIS_HOST=(str, '127.0.0.1'),
+    REDIS_PORT=(int, 6379)
 )
 environ.Env.read_env(BASE_DIR / '.env')
 
