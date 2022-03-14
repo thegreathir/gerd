@@ -30,6 +30,7 @@ jobs:
         flake8 .
     - name: Run Django tests
       run: |
+        export TICKET_SECRET=testTicketSecret SECRET_KEY=testSecretKey
         ./manage.py migrate
         coverage run --source='.' manage.py test
         coverage report
