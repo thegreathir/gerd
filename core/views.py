@@ -10,7 +10,7 @@ import jwt
 from asgiref.sync import async_to_sync
 from django.conf import settings
 from django.db import close_old_connections, transaction
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.decorators import api_view, permission_classes
@@ -47,6 +47,17 @@ class WordSetupError(APIException):
     default_code = 'words_unavailable'
 
 
+def send_room_update(room: Room):
+    channel_layer = channels.layers.get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        f'room_{room.id}',
+        {
+            'type': 'room_event',
+            'data': RoomSerializer(room).data
+        }
+    )
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def join_room(request, pk):
@@ -62,7 +73,7 @@ def join_room(request, pk):
         if room.players.count() < 4:
             room.players.add(request.user)
             room.save()
-            # TODO: Notify other players in room
+            send_room_update(room)
             return Response(status=status.HTTP_200_OK)
         else:
             raise LogicError(detail='Maximum room capacity exceeded')
@@ -92,7 +103,7 @@ def start_match(request, pk):
     )
 
     match.save()
-    # TODO: Notify other players that match has been started
+    send_room_update(room)
     return Response(status=status.HTTP_200_OK)
 
 
@@ -167,18 +178,9 @@ def finish_round(on: datetime, room_id: int) -> None:
             room.match.current_round += 1
             room.match.state = Match.State.WAITING
 
-        # Send message to room group
-        channel_layer = channels.layers.get_channel_layer()
-        room_group_name = 'room_%d' % room_id
-        async_to_sync(channel_layer.group_send)(
-            room_group_name,
-            {
-                'type': 'room_event',
-                'data': {'event': "round finished"}
-            }
-        )
-
         room.match.save()
+        send_room_update(room)
+
     except Exception:
         pass
     finally:
@@ -211,16 +213,7 @@ def play(request, pk):
     room.match.round_start_time = timezone.now()
     room.match.save()
 
-    # Send message to room group
-    channel_layer = channels.layers.get_channel_layer()
-    room_group_name = 'room_%d' % pk
-    async_to_sync(channel_layer.group_send)(
-        room_group_name,
-        {
-            'type': 'room_event',
-            'data': {'word': word.text}
-        }
-    )
+    send_room_update(room)
 
     threading.Thread(
         target=finish_round,
@@ -282,16 +275,7 @@ def correct(request, pk):
 
     add_score_to_team(room, room.match.correct_guess_score)
 
-    # Send message to room group
-    channel_layer = channels.layers.get_channel_layer()
-    room_group_name = 'room_%d' % pk
-    async_to_sync(channel_layer.group_send)(
-        room_group_name,
-        {
-            'type': 'room_event',
-            'data': {'word': word.text}
-        }
-    )
+    send_room_update(room)
 
     return Response(
         status=status.HTTP_200_OK,
@@ -322,16 +306,7 @@ def skip(request, pk):
 
     add_score_to_team(room, room.match.skip_penalty * -1)
 
-    # Send message to room group
-    channel_layer = channels.layers.get_channel_layer()
-    room_group_name = 'room_%d' % pk
-    async_to_sync(channel_layer.group_send)(
-        room_group_name,
-        {
-            'type': 'room_event',
-            'data': {'word': word.text}
-        }
-    )
+    send_room_update(room)
 
     return Response(
         status=status.HTTP_200_OK,
@@ -368,7 +343,7 @@ def rearrange(request, pk):
     room.teams = teams
     room.save()
 
-    # TODO: Notify others that teams changed
+    send_room_update(room)
     return Response(status=status.HTTP_200_OK)
 
 
@@ -395,9 +370,3 @@ def get_ticket(request, pk):
             )
         }
     )
-
-
-def test(request, pk):
-    return render(request, 'core/test.html', {
-        'room_name': pk
-    })

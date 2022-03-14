@@ -7,6 +7,10 @@ from typing import Dict, List, Tuple
 from unittest import mock
 
 import jwt
+from asgiref.sync import sync_to_async
+from channels.db import database_sync_to_async
+from channels.routing import URLRouter
+from channels.testing import WebsocketCommunicator
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.urls import reverse
@@ -14,7 +18,9 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase, APITransactionTestCase
 
-from core.models import Match, Room, Word
+from core.models import Match, Room, SelectedWord, Word
+from core.routing import websocket_urlpatterns
+from core.ticket_auth import TicketAuthMiddlewareStack
 from core.views import get_words_all_indices
 
 
@@ -701,6 +707,7 @@ class PlayMatchTestCase(get_equipped_test_case()):
 
 
 class RoundTestCase(get_equipped_test_case(APITransactionTestCase)):
+    reset_sequences = True
 
     def setUp(self):
         super().setUp()
@@ -755,3 +762,81 @@ class RoundTestCase(get_equipped_test_case(APITransactionTestCase)):
                     current_round + 1,
                     response.data['match']['current_round']
                 )
+
+
+class PushNotificationTestCase(get_equipped_test_case(APITransactionTestCase)):
+    reset_sequences = True
+
+    def setUp(self):
+        super().setUp()
+        self.create_words(self.words)
+
+        for i in range(6):
+            self.create_user(username=f'user{i}')
+        self.communicators = []
+
+    async def clear(self):
+
+        @database_sync_to_async
+        def clear_tables():
+            Room.objects.all().delete()
+            Match.objects.all().delete()
+            SelectedWord.objects.all().delete()
+
+        await clear_tables()
+        for communicator in self.communicators:
+            await communicator.disconnect()
+
+    async def get_ticket(self, username):
+        response = await self.async_client.get(
+            reverse('get_ticket', args=[1]),
+            AUTHORIZATION=f'Token {self.users["user1"].auth_token}',
+        )
+
+        return response.data['ticket']
+
+    def get_room_websocket_application(self):
+        return TicketAuthMiddlewareStack(
+            URLRouter(
+                websocket_urlpatterns
+            )
+        )
+
+    async def get_communicator(self, room_id: int, username: str):
+        ticket = await self.get_ticket(username)
+        communicator = WebsocketCommunicator(
+            self.get_room_websocket_application(),
+            f'rooms/{room_id}?ticket={ticket}'
+        )
+        connected, subprotocol = await communicator.connect()
+        self.assertTrue(connected)
+
+        self.communicators.append(communicator)
+
+        return communicator
+
+    async def test_join_push_notification(self):
+        await sync_to_async(self.create_sample_room)(creator='user1')
+
+        await sync_to_async(self.join_room)('user1')
+
+        user1_communicator = await self.get_communicator(1, 'user1')
+
+        await sync_to_async(self.join_room)('user2')
+        push = await user1_communicator.receive_json_from()
+        self.assertIn('user2', push['data']['players'])
+
+        user2_communicator = await self.get_communicator(1, 'user2')
+
+        await sync_to_async(self.join_room)('user3')
+
+        push1 = await user1_communicator.receive_json_from()
+        push2 = await user2_communicator.receive_json_from()
+
+        self.assertEqual(json.dumps(push1), json.dumps(push2))
+
+        self.assertIn('user1', push1['data']['players'])
+        self.assertIn('user2', push1['data']['players'])
+        self.assertIn('user3', push1['data']['players'])
+
+        await self.clear()

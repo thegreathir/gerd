@@ -1,28 +1,12 @@
-from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 
-from core.models import Room
 
-
-@database_sync_to_async
-def is_guessing(
-    user,
-    pk
-):
-    room = Room.objects.get(pk=pk)
-    players = room.players.values_list(
-        'username', flat=True).order_by('username')
-    guesser_index = (room.match.current_turn + 2) % 4
-    return players[guesser_index] == user.username
-
-
-class TestConsumer(AsyncJsonWebsocketConsumer):
+class RoomConsumer(AsyncJsonWebsocketConsumer):
     def __init__(self, *args, **kwargs):
         self.group_added = False
         super().__init__(args, kwargs)
 
     async def connect(self):
-        # TODO: check user-related stuff (auth? room-related?)
         self.user = self.scope['user']
         if not self.user.is_authenticated:
             await self.close()
@@ -57,12 +41,6 @@ class TestConsumer(AsyncJsonWebsocketConsumer):
 
     # Receive message from room group
     async def room_event(self, event):
-        data = event['data']
-        if 'word' in data:
-            if await is_guessing(self.user, self.room_pk):
-                data['word'] = '<-Guessing->'
-
-        # Send message to WebSocket
         await self.send_json({
-            'data': data
+            'data': event['data']
         })

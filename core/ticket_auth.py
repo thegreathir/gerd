@@ -14,15 +14,11 @@ def get_user_and_room(username, room_pk):
     user = User.objects.get(username=username)
     room = Room.objects.get(pk=room_pk)
     if not room.players.filter(pk=user.id).exists():
-        raise Exception("user not in room")
+        raise Exception('Player has not joined to room')
     return user, room
 
 
 class TicketAuthMiddleware:
-    """
-    Token authorization middleware for Django Channels 2
-    """
-
     def __init__(self, app):
         # Store the ASGI application we were passed
         self.app = app
