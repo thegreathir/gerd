@@ -8,12 +8,13 @@ from typing import Dict, List, Tuple
 from unittest import mock
 
 import jwt
-from asgiref.sync import sync_to_async
+from asgiref.sync import async_to_sync, sync_to_async
 from channels.db import database_sync_to_async
 from channels.routing import URLRouter
 from channels.testing import WebsocketCommunicator
 from django.conf import settings
 from django.contrib.auth.models import User
+from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
@@ -790,9 +791,9 @@ class PushNotificationTestCase(get_equipped_test_case(APITransactionTestCase)):
 
         self.communicators.clear()
 
-    async def get_ticket(self, username):
+    async def get_ticket(self, username, room_id=1):
         response = await self.async_client.get(
-            reverse('get_ticket', args=[1]),
+            reverse('get_ticket', args=[room_id]),
             AUTHORIZATION=f'Token {self.users["user1"].auth_token}',
         )
 
@@ -817,6 +818,103 @@ class PushNotificationTestCase(get_equipped_test_case(APITransactionTestCase)):
         self.communicators.append(communicator)
 
         return communicator
+
+    async def test_player_should_not_establish_socket_to_not_existing_room(
+        self
+    ):
+        communicator = WebsocketCommunicator(
+            self.get_room_websocket_application(),
+            'rooms/1'
+        )
+        connected, subprotocol = await communicator.connect()
+        self.assertFalse(connected)
+        await communicator.disconnect()
+
+        await self.clear()
+
+    async def test_player_should_not_establish_socket_without_ticket(self):
+        await sync_to_async(self.create_sample_room)(creator='user1')
+
+        communicator = WebsocketCommunicator(
+            self.get_room_websocket_application(),
+            'rooms/1'
+        )
+        connected, subprotocol = await communicator.connect()
+        self.assertFalse(connected)
+        await communicator.disconnect()
+
+        await self.clear()
+
+    async def test_player_should_not_establish_socket_with_invalid_ticket(
+        self
+    ):
+        await sync_to_async(self.create_sample_room)(creator='user1')
+
+        communicator = WebsocketCommunicator(
+            self.get_room_websocket_application(),
+            'rooms/1?ticket=invalidticketrandom'
+        )
+        connected, subprotocol = await communicator.connect()
+        self.assertFalse(connected)
+        await communicator.disconnect()
+
+        await self.clear()
+
+    @override_settings(TICKET_VALIDITY_PERIOD_SECONDS=2)
+    @async_to_sync
+    async def test_player_should_not_establish_socket_with_expired_ticket(
+        self
+    ):
+        await sync_to_async(self.create_sample_room)(creator='user1')
+        await sync_to_async(self.join_room)('user1')
+        ticket = await self.get_ticket('user1')
+
+        communicator = WebsocketCommunicator(
+            self.get_room_websocket_application(),
+            f'rooms/1?ticket={ticket}'
+        )
+        connected, subprotocol = await communicator.connect()
+        self.assertTrue(connected)
+        await communicator.disconnect()
+
+        await asyncio.sleep(3)
+
+        communicator = WebsocketCommunicator(
+            self.get_room_websocket_application(),
+            f'rooms/1?ticket={ticket}'
+        )
+        connected, subprotocol = await communicator.connect()
+        self.assertFalse(connected)
+        await communicator.disconnect()
+
+        await self.clear()
+
+    async def test_player_should_not_establish_socket_with_another_ticket(
+        self
+    ):
+        await sync_to_async(self.create_sample_room)(creator='user1')
+        await sync_to_async(self.join_room)('user1')
+        ticket1 = await self.get_ticket('user1')
+
+        await sync_to_async(self.create_sample_room)(creator='user1')
+        await sync_to_async(self.join_room)('user1', room_id=2)
+        ticket2 = await self.get_ticket('user1', room_id=2)
+
+        communicator = WebsocketCommunicator(
+            self.get_room_websocket_application(),
+            f'rooms/1?ticket={ticket1}'
+        )
+        connected, subprotocol = await communicator.connect()
+        self.assertTrue(connected)
+        await communicator.disconnect()
+
+        communicator = WebsocketCommunicator(
+            self.get_room_websocket_application(),
+            f'rooms/1?ticket={ticket2}'
+        )
+        connected, subprotocol = await communicator.connect()
+        self.assertFalse(connected)
+        await communicator.disconnect()
 
     async def test_join_push_notification(self):
         await sync_to_async(self.create_sample_room)(creator='user1')
