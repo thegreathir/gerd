@@ -794,7 +794,7 @@ class PushNotificationTestCase(get_equipped_test_case(APITransactionTestCase)):
     async def get_ticket(self, username, room_id=1):
         response = await self.async_client.get(
             reverse('get_ticket', args=[room_id]),
-            AUTHORIZATION=f'Token {self.users["user1"].auth_token}',
+            AUTHORIZATION=f'Token {self.users[username].auth_token}',
         )
 
         return response.data['ticket']
@@ -807,7 +807,7 @@ class PushNotificationTestCase(get_equipped_test_case(APITransactionTestCase)):
         )
 
     async def get_communicator(self, room_id: int, username: str):
-        ticket = await self.get_ticket(username)
+        ticket = await self.get_ticket(username, room_id)
         communicator = WebsocketCommunicator(
             self.get_room_websocket_application(),
             f'rooms/{room_id}?ticket={ticket}'
