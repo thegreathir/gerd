@@ -5,10 +5,12 @@ from datetime import datetime, timedelta
 from functools import cache
 from typing import List
 
+import channels.layers
 import jwt
+from asgiref.sync import async_to_sync
 from django.conf import settings
 from django.db import close_old_connections, transaction
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.decorators import api_view, permission_classes
@@ -165,7 +167,17 @@ def finish_round(on: datetime, room_id: int) -> None:
             room.match.current_round += 1
             room.match.state = Match.State.WAITING
 
-        # TODO: Notify others
+        # Send message to room group
+        channel_layer = channels.layers.get_channel_layer()
+        room_group_name = 'room_%d' % room_id
+        async_to_sync(channel_layer.group_send)(
+            room_group_name,
+            {
+                'type': 'room_event',
+                'data': {'event': "round finished"}
+            }
+        )
+
         room.match.save()
     except Exception:
         pass
@@ -199,7 +211,16 @@ def play(request, pk):
     room.match.round_start_time = timezone.now()
     room.match.save()
 
-    # TODO: Notify others
+    # Send message to room group
+    channel_layer = channels.layers.get_channel_layer()
+    room_group_name = 'room_%d' % pk
+    async_to_sync(channel_layer.group_send)(
+        room_group_name,
+        {
+            'type': 'room_event',
+            'data': {'word': word.text}
+        }
+    )
 
     threading.Thread(
         target=finish_round,
@@ -261,7 +282,16 @@ def correct(request, pk):
 
     add_score_to_team(room, room.match.correct_guess_score)
 
-    # TODO: Notify others
+    # Send message to room group
+    channel_layer = channels.layers.get_channel_layer()
+    room_group_name = 'room_%d' % pk
+    async_to_sync(channel_layer.group_send)(
+        room_group_name,
+        {
+            'type': 'room_event',
+            'data': {'word': word.text}
+        }
+    )
 
     return Response(
         status=status.HTTP_200_OK,
@@ -292,7 +322,16 @@ def skip(request, pk):
 
     add_score_to_team(room, room.match.skip_penalty * -1)
 
-    # TODO: Notify others
+    # Send message to room group
+    channel_layer = channels.layers.get_channel_layer()
+    room_group_name = 'room_%d' % pk
+    async_to_sync(channel_layer.group_send)(
+        room_group_name,
+        {
+            'type': 'room_event',
+            'data': {'word': word.text}
+        }
+    )
 
     return Response(
         status=status.HTTP_200_OK,
@@ -356,3 +395,9 @@ def get_ticket(request, pk):
             )
         }
     )
+
+
+def test(request, pk):
+    return render(request, 'core/test.html', {
+        'room_name': pk
+    })

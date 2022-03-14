@@ -19,7 +19,7 @@ from rest_framework.authtoken import views
 from rest_framework.documentation import include_docs_urls
 
 from core.views import (RoomDetail, RoomList, correct, get_ticket, join_room,
-                        play, rearrange, skip, start_match)
+                        play, rearrange, skip, start_match, test)
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -34,4 +34,6 @@ urlpatterns = [
     path('rooms/<int:pk>/skip', skip, name='skip'),
     path('rooms/<int:pk>/rearrange', rearrange, name='rearrange'),
     path('rooms/<int:pk>/ticket', get_ticket, name='get_ticket'),
+
+    path('test/<int:pk>/', test, name='test'),
 ]

@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.0/ref/settings/
 """
 
+import sys
 from pathlib import Path
 
 import environ
@@ -43,8 +44,27 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'core',
     'rest_framework',
-    'rest_framework.authtoken'
+    'rest_framework.authtoken',
+    'channels',
 ]
+
+ASGI_APPLICATION = 'gerd.asgi.application'
+
+if 'test' in sys.argv:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels.layers.InMemoryChannelLayer"
+        }
+    }
+else:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels_redis.core.RedisChannelLayer',
+            'CONFIG': {
+                "hosts": [('127.0.0.1', 6379)],
+            },
+        },
+    }
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -137,4 +157,4 @@ REST_FRAMEWORK = {
 }
 
 TICKET_SECRET = env('TICKET_SECRET')
-TICKET_VALIDITY_PERIOD_SECONDS = 30
+TICKET_VALIDITY_PERIOD_SECONDS = 3600
