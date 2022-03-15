@@ -4,7 +4,7 @@ from channels.generic.websocket import AsyncJsonWebsocketConsumer
 class RoomConsumer(AsyncJsonWebsocketConsumer):
     def __init__(self, *args, **kwargs):
         self.group_added = False
-        super().__init__(args, kwargs)
+        super().__init__(*args, **kwargs)
 
     async def connect(self):
         self.user = self.scope['user']
