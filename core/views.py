@@ -5,6 +5,10 @@ from datetime import datetime, timedelta
 from functools import cache
 from typing import List
 
+import channels.layers
+import jwt
+from asgiref.sync import async_to_sync
+from django.conf import settings
 from django.db import close_old_connections, transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -43,6 +47,17 @@ class WordSetupError(APIException):
     default_code = 'words_unavailable'
 
 
+def send_room_update(room: Room):
+    channel_layer = channels.layers.get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        f'room_{room.id}',
+        {
+            'type': 'room_event',
+            'data': RoomSerializer(room).data
+        }
+    )
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def join_room(request, pk):
@@ -58,7 +73,7 @@ def join_room(request, pk):
         if room.players.count() < 4:
             room.players.add(request.user)
             room.save()
-            # TODO: Notify other players in room
+            send_room_update(room)
             return Response(status=status.HTTP_200_OK)
         else:
             raise LogicError(detail='Maximum room capacity exceeded')
@@ -88,7 +103,7 @@ def start_match(request, pk):
     )
 
     match.save()
-    # TODO: Notify other players that match has been started
+    send_room_update(room)
     return Response(status=status.HTTP_200_OK)
 
 
@@ -163,8 +178,9 @@ def finish_round(on: datetime, room_id: int) -> None:
             room.match.current_round += 1
             room.match.state = Match.State.WAITING
 
-        # TODO: Notify others
         room.match.save()
+        send_room_update(room)
+
     except Exception:
         pass
     finally:
@@ -197,7 +213,7 @@ def play(request, pk):
     room.match.round_start_time = timezone.now()
     room.match.save()
 
-    # TODO: Notify others
+    send_room_update(room)
 
     threading.Thread(
         target=finish_round,
@@ -259,7 +275,7 @@ def correct(request, pk):
 
     add_score_to_team(room, room.match.correct_guess_score)
 
-    # TODO: Notify others
+    send_room_update(room)
 
     return Response(
         status=status.HTTP_200_OK,
@@ -290,7 +306,7 @@ def skip(request, pk):
 
     add_score_to_team(room, room.match.skip_penalty * -1)
 
-    # TODO: Notify others
+    send_room_update(room)
 
     return Response(
         status=status.HTTP_200_OK,
@@ -327,5 +343,30 @@ def rearrange(request, pk):
     room.teams = teams
     room.save()
 
-    # TODO: Notify others that teams changed
+    send_room_update(room)
     return Response(status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_ticket(request, pk):
+    room = get_object_or_404(Room, pk=pk)
+    if not room.players.filter(pk=request.user.id).exists():
+        raise PermissionDenied(detail='You are not member of this room')
+
+    return Response(
+        status=status.HTTP_200_OK,
+        data={
+            'ticket': jwt.encode(
+                payload={
+                    'room': pk,
+                    'username': request.user.username,
+                    'exp': datetime.now(tz=timezone.utc) + timedelta(
+                        seconds=settings.TICKET_VALIDITY_PERIOD_SECONDS
+                    )
+                },
+                key=settings.TICKET_SECRET,
+                algorithm="HS256"
+            )
+        }
+    )
