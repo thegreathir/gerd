@@ -21,7 +21,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 env = environ.Env(
     DEBUG=(bool, True),
     REDIS_HOST=(str, '127.0.0.1'),
-    REDIS_PORT=(int, 6379)
+    REDIS_PORT=(int, 6379),
+    CORS_ALLOWED_ORIGINS=(list, [
+        "http://127.0.0.1:3000",
+        "http://localhost:3000",
+    ])
 )
 environ.Env.read_env(BASE_DIR / '.env')
 
@@ -31,6 +35,8 @@ environ.Env.read_env(BASE_DIR / '.env')
 SECRET_KEY = env('SECRET_KEY')
 
 DEBUG = env('DEBUG')
+
+CORS_ALLOWED_ORIGINS = env('CORS_ALLOWED_ORIGINS')
 
 ALLOWED_HOSTS = []
 
@@ -79,11 +85,6 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-]
-
-CORS_ALLOWED_ORIGINS = [
-    "http://127.0.0.1:3000",
-    "http://localhost:3000",
 ]
 
 CORS_ALLOW_CREDENTIALS = True
