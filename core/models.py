@@ -1,4 +1,7 @@
+import os
+
 from django.conf import settings
+from django.core.management import call_command
 from django.db import models
 from django.db.models.signals import post_save
 from django.dispatch import receiver
@@ -72,7 +75,22 @@ class Room(models.Model):
         choices=Teams.choices, default=Teams.ONE_TWO__THREE_FOUR)
 
 
+class WordsFile(models.Model):
+    csv_file = models.FileField(
+        upload_to='wordsfiles'
+    )
+
+
 @receiver(post_save, sender=settings.AUTH_USER_MODEL)
 def create_auth_token(sender, instance=None, created=False, **kwargs):
     if created:
         Token.objects.create(user=instance)
+
+
+@receiver(post_save, sender=WordsFile)
+def import_words_from_file(sender, instance=None, created=False, **kwargs):
+    if created:
+        call_command(
+            'importwords',
+            os.path.join(settings.MEDIA_ROOT, instance.csv_file.path)
+        )
