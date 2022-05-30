@@ -25,6 +25,9 @@ env = environ.Env(
     CORS_ALLOWED_ORIGINS=(list, [
         "http://127.0.0.1:3000",
         "http://localhost:3000",
+    ]),
+    ALLOWED_HOSTS=(list, [
+        "127.0.0.1",
     ])
 )
 environ.Env.read_env(BASE_DIR / '.env')
@@ -38,7 +41,7 @@ DEBUG = env('DEBUG')
 
 CORS_ALLOWED_ORIGINS = env('CORS_ALLOWED_ORIGINS')
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = env('ALLOWED_HOSTS')
 
 
 # Application definition
