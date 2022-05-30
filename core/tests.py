@@ -717,6 +717,9 @@ class RoundTestCase(get_equipped_test_case(APITransactionTestCase)):
             self.create_user(username=f'user{i}')
 
         self.create_sample_room(creator='user1')
+        room = Room.objects.get(pk=1)
+        room.teams = Room.Teams.ONE_THREE__TWO_FOUR
+        room.save()
 
         self.join_room('user1')
         self.join_room('user2')
