@@ -45,6 +45,11 @@ CORS_ALLOWED_ORIGINS = env('CORS_ALLOWED_ORIGINS')
 
 ALLOWED_HOSTS = env('ALLOWED_HOSTS')
 
+CSRF_TRUSTED_ORIGINS = [
+    'https://gerdapi.emad.sh',
+    'http://127.0.0.1',
+    'http://localhost'
+]
 
 # Application definition
 
