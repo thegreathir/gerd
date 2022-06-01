@@ -3,7 +3,7 @@ import threading
 import time
 from datetime import datetime, timedelta
 from functools import cache
-from typing import List
+from typing import List, Optional
 
 import channels.layers
 import jwt
@@ -163,6 +163,16 @@ def get_room_and_check_turn(
     return room
 
 
+def get_next_turn(room: Room) -> Optional[int]:
+    if room.teams == Room.Teams.ONE_TWO__THREE_FOUR:
+        return [2, 3, 1, 0][int(room.match.current_turn)]
+    elif room.teams == Room.Teams.ONE_THREE__TWO_FOUR:
+        return [1, 2, 3, 0][int(room.match.current_turn)]
+    elif room.teams == Room.Teams.ONE_FOUR__TWO_THREE:
+        return [1, 3, 0, 2][int(room.match.current_turn)]
+    return None
+
+
 def finish_round(on: datetime, room_id: int) -> None:
     time.sleep((on - timezone.now()).seconds)
     try:
@@ -174,7 +184,7 @@ def finish_round(on: datetime, room_id: int) -> None:
         if room.match.current_round == room.match.total_round_count:
             room.match.state = Match.State.FINISHED
         else:
-            room.match.current_turn = (room.match.current_turn + 1) % 4
+            room.match.current_turn = get_next_turn(room)
             room.match.current_round += 1
             room.match.state = Match.State.WAITING
 
