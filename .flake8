@@ -8,5 +8,6 @@ exclude =
     venv,
     .env,
     core/migrations
+    gerd/asgi.py
 per-file-ignores =
     gerd/settings.py:E501

@@ -1,0 +1,21 @@
+version: '2'
+services:
+  redis:
+    image: redis
+    ports:
+      - "6379:6379"
+  backend:
+    image: "ghcr.io/thegreathir/gerd:v1.0.0-rc3"
+    volumes:
+    - $PWD/db.sqlite3:/usr/src/app/db.sqlite3
+    environment:
+      - REDIS_HOST=redis
+      - TICKET_SECRET=randomTick3tS3cret
+      - SECRET_KEY=s3creeet@Keyy
+      - ALLOWED_HOSTS=gerdapi.emad.sh,127.0.0.1
+      - CORS_ALLOWED_ORIGINS=http://gerd.emad.sh,https://gerd.emad.sh
+      - DEBUG=true
+    depends_on:
+      - redis
+    ports:
+      - "8000:8000"
