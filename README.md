@@ -7,9 +7,15 @@ This repo contains the backend of the game's online implementation.
 The game implementation is room-based, which means each player can create a room and share it with other players who he/she wants to play with.
 
 
-## Deploy
+## Implementation
+This repo contains back-end part of the project using [django-rest-framework](https://www.django-rest-framework.org/) and [django-channels](https://channels.readthedocs.io/en/stable/).
 
 ## Test
+Project test coverage is 93%.
+To run tests:
+```bash
+./manage.py test
+```
 
 ## Web client
-The web client is available at [this repo](https://github.com/amsen20/gerd-frontt).
+The web client is available at [this repo](https://github.com/amsen20/gerd-front).
